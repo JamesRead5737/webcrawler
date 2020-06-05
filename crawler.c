@@ -325,6 +325,7 @@ html_mailto_find(char *html)
         int size = 0;
 
         first = html;
+	last = html;
 
         while (first && last) {
                 char *end;
@@ -383,6 +384,7 @@ html_link_find(char *url, char *html)
         int size = 0;
 
         first = html;
+	last = html;
 
         while (first && last) {
 		first = strstr(first, "href=\"");
