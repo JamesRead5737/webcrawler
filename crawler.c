@@ -38,6 +38,8 @@
 #define READY 0
 #define BUSY 1
 
+int debug = 0;
+
 /* Global information, common to all connections */
 typedef struct _GlobalInfo
 {
@@ -88,7 +90,7 @@ typedef struct mysql_node
 {
 	MYSQL *mysql_conn;
 	enum net_async_status status;
-	const char *sql;
+	char *sql;
 	int sequence;
 	struct mysql_node *next;
 } MysqlNode;
@@ -107,6 +109,9 @@ char *url = NULL;
 void
 mysql_start()
 {
+	if (debug)
+		fprintf(stderr, "Calling mysql_init on all nodes.\n");
+
 	head = (MysqlNode *)malloc(sizeof(MysqlNode));
 	if (head == NULL)
 	{
@@ -114,6 +119,7 @@ mysql_start()
 		exit(EXIT_FAILURE);
 	}
 	head->mysql_conn = mysql_init(NULL);
+	head->sql = NULL;
 	if (head->mysql_conn == NULL)
 	{
 		fprintf(stderr, "%s\n", mysql_error(head->mysql_conn));
@@ -138,6 +144,7 @@ mysql_start()
         	        fprintf(stderr, "%s\n", mysql_error(current->mysql_conn));
         	        exit(1);
        		}
+		current->sql = NULL;
 		current->sequence = READY;
 		current->next = NULL;
 	}
@@ -148,6 +155,9 @@ mysql_start()
                 fprintf(stderr, "%s\n", mysql_error(mysql_conn));
                 exit(1);
         }
+
+	if (debug)
+		fprintf(stderr, "Connecting all nodes.\n");
 
 	current = head;
 	while (current != NULL)
@@ -178,7 +188,9 @@ mysql_start()
 		fprintf(stderr, "mysql_real_connect_nonblocking: %s\n", mysql_error(mysql_conn));
 		exit(EXIT_FAILURE);
 	}
-
+	
+	if (debug)
+		fprintf(stderr, "All nodes connected.\n");
 }
 
 void
@@ -190,6 +202,7 @@ mysql_stop()
 	{
 		MysqlNode *next = current->next;
 		mysql_close(current->mysql_conn);
+		free(current->sql);
 		free(current);
 		current = next;
 	}
@@ -391,7 +404,16 @@ html_mailto_find(char *html)
 		if (!mysql_real_escape_string(mysql_conn, escaped_email, email, strlen(email)))
 		{
 		}
-		sprintf(sql_current->sql, "INSERT IGNORE INTO emails (email) VALUES ('%s')", escaped_email);
+		int ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "INSERT IGNORE INTO emails (email) VALUES ('%s')", escaped_email);
+		if (ret >= 0 && ret < sizeof(sql_current->sql))
+		{
+			
+		}
+		else
+		{
+			if (debug)
+				fprintf(stderr, "%s was too large for buffer\n", escaped_email);
+		}
 		sql_current->next = NULL;
 		free(email);
         }
@@ -449,7 +471,16 @@ html_link_find(char *url, char *html)
 			char escaped_url[(strlen(newurl)*2)+1];
 			if (!mysql_real_escape_string(mysql_conn, escaped_url, newurl, strlen(newurl)))
 			{}
-			sprintf(sql_current->sql, "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
+			int ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
+			if (ret >= 0 && ret < sizeof(sql_current->sql))
+			{
+				
+			}
+			else
+			{
+				if (debug)
+					fprintf(stderr, "%s was too large for buffer\n", escaped_url);
+			}
 				
 			sql_current->next = NULL;
 			sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
@@ -471,11 +502,29 @@ html_link_find(char *url, char *html)
 			}
 
 			if (strcmp(host1, host2) == 0){
-				sprintf(sql_current->sql, "UPDATE crawled SET links = links + 1 WHERE url = '%s'", escaped_url);
+				ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "UPDATE crawled SET links = links + 1 WHERE url = '%s'", escaped_url);
+				if (ret >= 0 && ret < sizeof(sql_current->sql))
+				{
+				
+				}
+				else
+				{
+					if (debug)
+						fprintf(stderr, "%s was too large for buffer\n", escaped_url);
+				}
 			}
 			else
 			{
-				sprintf(sql_current->sql, "UPDATE crawled SET backlinks = backlinks + 1 WHERE url = '%s'", escaped_url);
+				ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "UPDATE crawled SET backlinks = backlinks + 1 WHERE url = '%s'", escaped_url);
+				if (ret >= 0 && ret < sizeof(sql_current->sql))
+				{
+				
+				}
+				else
+				{
+					if (debug)
+						fprintf(stderr, "%s was too large for buffer\n", escaped_url);
+				}
 			}
 			sql_current->next = NULL;
 
@@ -681,7 +730,7 @@ check_multi_info(GlobalInfo *g)
 			//fprintf(MSG_OUT, "DONE: %s => (%d) %s\n", eff_url, res, conn->error);
 
 			curl_multi_remove_handle(g->multi, easy);
-			//free(conn->url);
+			free(conn->url);
 			free(conn->data);
 			curl_easy_cleanup(easy);
 			transfers_dec(g);
@@ -762,6 +811,7 @@ setsock(SockInfo *f, curl_socket_t s, CURL *e, int act, GlobalInfo *g)
 	f->action = act;
 	f->easy = e;
  
+	memset(&ev, 0, sizeof(ev));
 	ev.events = kind;
 	ev.data.fd = s;
 
@@ -822,7 +872,8 @@ new_head_conn(char *url, GlobalInfo *g)
 	transfers_inc(g);
 
 	conn->global = g;
-	conn->url = url;
+	conn->url = strdup(url);
+	free(url);
 	curl_easy_setopt(conn->easy, CURLOPT_URL, conn->url);
 	curl_easy_setopt(conn->easy, CURLOPT_WRITEFUNCTION, write_cb);
 	curl_easy_setopt(conn->easy, CURLOPT_WRITEDATA, conn);
@@ -866,7 +917,8 @@ new_body_conn(char *url, GlobalInfo *g)
         transfers_inc(g);
 
         conn->global = g;
-        conn->url = url;
+        conn->url = strdup(url);
+	free(url);
         curl_easy_setopt(conn->easy, CURLOPT_URL, conn->url);
         curl_easy_setopt(conn->easy, CURLOPT_WRITEFUNCTION, write_cb);
         curl_easy_setopt(conn->easy, CURLOPT_WRITEDATA, conn);
@@ -982,6 +1034,7 @@ crawler_init()
 	its.it_value.tv_sec = 1;
 	timerfd_settime(g.tfd, 0, &its, NULL);
  
+	memset(&ev, 0, sizeof(ev));
 	ev.events = EPOLLIN;
 	ev.data.fd = g.tfd;
 	epoll_ctl(g.epfd, EPOLL_CTL_ADD, g.tfd, &ev);
@@ -997,7 +1050,8 @@ crawler_init()
 
 	/* we don't call any curl_multi_socket*() function yet as we have no handles added! */ 
 
-	//printf("Starting crawler...\n");
+	if (debug)
+		printf("Starting crawler...\n");
 
 	while (!should_exit) {
 		int idx;
@@ -1006,7 +1060,8 @@ crawler_init()
 		/* Pop url from frontier in crawled table and crawl it */
 		if (sequence == ALL_ROWS_FETCHED)
 		{
-			//printf("Doing select\n");
+			if (debug)
+				printf("Doing select\n");
 			status = mysql_real_query_nonblocking(mysql_conn, sql, (unsigned long)strlen(sql));
 
 			if (status == NET_ASYNC_COMPLETE)
@@ -1020,8 +1075,9 @@ crawler_init()
 			}
 		} 
 		else if (sequence == SELECT_DONE) 
-		{
-			//printf("Select done. Storing result\n");
+		{	
+			if (debug)
+				printf("Select done. Storing result\n");
 			status = mysql_store_result_nonblocking(mysql_conn, &result);
 
 			if (status == NET_ASYNC_COMPLETE)
@@ -1036,7 +1092,8 @@ crawler_init()
 		}
 		else if (sequence == FETCHED_RESULT)
 		{
-			//printf("Result stored. Fetching row\n");
+			if (debug)
+				printf("Result stored. Fetching row\n");
 			status = mysql_fetch_row_nonblocking(result, &row);
 
 			if (status == NET_ASYNC_COMPLETE)
@@ -1044,13 +1101,15 @@ crawler_init()
                                 sequence = FETCHED_ROW;
 				if (row == NULL)
 				{
-					//printf("No more rows.\n");
+					if (debug)
+						printf("No more rows.\n");
 					last_row_fetched = 1;
 				}
 				else
 				{
 					url = strdup(row[0]);
-					//printf("url: %s\n", url);
+					if (debug)
+						printf("url: %s\n", url);
 					new_head_conn(url, &g);
 					//free(url);
 					//url = NULL;
@@ -1066,7 +1125,8 @@ crawler_init()
 		{
 			if (url != NULL)
 			{
-				//printf("Fetched row. Deleting url from frontier\n");
+				if (debug)
+					printf("Fetched row. Deleting url from frontier\n");
 				char escaped_url[(strlen(url)*2)+1];
 				if (!mysql_real_escape_string(mysql_conn, escaped_url, url, strlen(url)))
 				{}
@@ -1087,6 +1147,8 @@ crawler_init()
 		{
 			if (last_row_fetched == 1)
 			{
+				if (debug)
+					fprintf(stderr, "Last row fetched\n");
 				status = mysql_free_result_nonblocking(result);
 				if (status == NET_ASYNC_COMPLETE)
 				{
@@ -1101,6 +1163,8 @@ crawler_init()
 			}
 			else
 			{
+				if (debug)
+					fprintf(stderr, "Fetching next row\n");
 				sequence = FETCHED_RESULT;
 			}
 
@@ -1115,6 +1179,7 @@ crawler_init()
 				if(sql_head != NULL)
 				{
 					SqlNode *sql_tmp = sql_head->next;
+					free(current->sql);
 					current->sql = strdup(sql_head->sql);
 					free(sql_head);
 					sql_head = sql_tmp;
@@ -1165,6 +1230,38 @@ crawler_init()
 		int idx;
                 int err = epoll_wait(g.epfd, events, sizeof(events)/sizeof(struct epoll_event), 10000);
 
+		MysqlNode *current = head;
+		while (current != NULL)
+		{
+			if (current->sequence == READY)
+			{
+				if(sql_head != NULL)
+				{
+					SqlNode *sql_tmp = sql_head->next;
+					free(current->sql);
+					current->sql = strdup(sql_head->sql);
+					free(sql_head);
+					sql_head = sql_tmp;
+					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
+				}
+			}
+			else if (current->sequence == BUSY)
+			{
+				while (current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql)) == NET_ASYNC_NOT_READY);
+					/* empty loop */
+				if (current->status == NET_ASYNC_COMPLETE)
+				{
+					current->sequence = READY;
+				}
+				else if (current->status == NET_ASYNC_ERROR)
+				{
+					fprintf(stderr, "mysql_real_query_nonblocking: %s\n", mysql_error(current->mysql_conn));
+                                        exit(EXIT_FAILURE);
+				}
+			}
+			current = current->next;
+		}
+
                 if (err == -1) {
                         if (errno == EINTR) {
                                 fprintf(MSG_OUT, "note: wait interrupted\n");
@@ -1202,6 +1299,20 @@ main(int argc, char **argv)
 	should_exit = 0;
 	signal(SIGINT, signal_handler);
 	signal(SIGKILL, signal_handler);
+	sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
+
+	while ((opt = getopt(argc, argv, "d")) != -1)
+	{
+		switch (opt) 
+		{
+			case 'd':
+				debug = 1;
+				break;
+			default:
+				fprintf(stderr, "Usage: %s [-d]\n", argv[0]);
+				exit(EXIT_FAILURE);
+		}
+	}
 
 	mysql_start();
 	crawler_init();
