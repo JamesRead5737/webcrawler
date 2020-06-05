@@ -578,7 +578,14 @@ html_parse(char *url, char *html)
                 if (!mysql_real_escape_string(mysql_conn, escaped_title, title, strlen(title)))
                 {
                 }
-		sprintf(sql_current->sql, "UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_title, escaped_url);
+		int ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_title, escaped_url);
+		if (ret >= 0 && ret < sizeof(sql_current->sql))
+		{}
+		else
+		{
+			if (debug)
+				fprintf(stderr, "%s and %s too big for buffer\n", escaped_title, escaped_url);
+		}
 		sql_current->next = NULL;
 	}
 
@@ -918,7 +925,7 @@ new_body_conn(char *url, GlobalInfo *g)
 
         conn->global = g;
         conn->url = strdup(url);
-	free(url);
+	//free(url);
         curl_easy_setopt(conn->easy, CURLOPT_URL, conn->url);
         curl_easy_setopt(conn->easy, CURLOPT_WRITEFUNCTION, write_cb);
         curl_easy_setopt(conn->easy, CURLOPT_WRITEDATA, conn);
@@ -1130,7 +1137,14 @@ crawler_init()
 				char escaped_url[(strlen(url)*2)+1];
 				if (!mysql_real_escape_string(mysql_conn, escaped_url, url, strlen(url)))
 				{}
-				sprintf( delete_sql, "UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url);
+				int ret = snprintf( delete_sql, sizeof(delete_sql), "UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url);
+				if (ret >= 0 && ret < sizeof(delete_sql))
+				{}
+				else
+				{
+					if (debug)
+						fprintf(stderr, "%s too big for buffer\n", escaped_url);
+				}
 				status = mysql_real_query_nonblocking(mysql_conn, delete_sql, (unsigned long)strlen(delete_sql));
 				if (status == NET_ASYNC_COMPLETE)
                        		{
@@ -1224,6 +1238,11 @@ crawler_init()
 	fprintf(MSG_OUT, "Exiting normally.\n");
 	fflush(MSG_OUT);
  
+	if (sequence == FETCHED_RESULT || sequence == FETCHED_ROW || sequence == DELETE_DONE)
+	{
+		mysql_free_result(result);
+	}
+
 	curl_multi_setopt(g.multi, CURLMOPT_SOCKETFUNCTION, end_sock_cb);
 	while (g.concurrent_connections > 0 || g.transfers > 0)
 	{
@@ -1284,6 +1303,19 @@ crawler_init()
 
 	fprintf(MSG_OUT, "Finished all in progress downloads.\n");
 	fflush(MSG_OUT);
+
+	while (sql_head != NULL)
+	{
+		SqlNode *sql_tmp = sql_head->next;
+		if (mysql_real_query(mysql_conn, sql_head->sql, (unsigned long)strlen(sql_head->sql)))
+		{
+			fprintf(stderr, "mysql_real_query failed: %s", mysql_error(mysql_conn));
+			exit(EXIT_FAILURE);
+		}
+		free(sql_head->sql);
+		free(sql_head);
+		sql_head = sql_tmp;
+	}
 
 	curl_multi_cleanup(g.multi);
 	curl_global_cleanup();
