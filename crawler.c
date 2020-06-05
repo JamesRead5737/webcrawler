@@ -359,11 +359,21 @@ html_mailto_find(char *html)
 		if (sql_head == NULL)
                 {
                         sql_head = (SqlNode *)malloc(sizeof(SqlNode));
+			if (sql_head == NULL)
+			{
+				fprintf(stderr, "malloc returned NULL, out of memory\n");
+				exit(EXIT_FAILURE);
+			}
                         sql_current = sql_head;
                 }
                 else
                 {
                         sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+			if (sql_current->next == NULL)
+			{
+				fprintf(stderr, "malloc returned NULL, out of memory\n");
+				exit(EXIT_FAILURE);
+			}
                         sql_current = sql_current->next;
                 }
 
@@ -408,11 +418,21 @@ html_link_find(char *url, char *html)
 			if (sql_head == NULL)
 			{
 				sql_head = (SqlNode *)malloc(sizeof(SqlNode));
+				if (sql_head == NULL)
+				{
+					fprintf(stderr, "malloc returned NULL, out of memory\n");
+					exit(EXIT_FAILURE);
+				}
 				sql_current = sql_head;
 			}
                 	else
                 	{
                 	        sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+				if (sql_current->next == NULL)
+				{
+					fprintf(stderr, "malloc returned NULL, out of memory\n");
+					exit(EXIT_FAILURE);
+				}
                         	sql_current = sql_current->next;
                 	}
 
@@ -421,7 +441,13 @@ html_link_find(char *url, char *html)
 			{}
 			sprintf(sql_current->sql, "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
 				
+			sql_current->next = NULL;
 			sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+			if (sql_current->next == NULL)
+			{
+				fprintf(stderr, "malloc returned NULL, out of memory\n");
+				exit(EXIT_FAILURE);
+			}
 			sql_current = sql_current->next;
 
 			char *host1, *host2;
@@ -462,11 +488,21 @@ html_parse(char *url, char *html)
 		if (sql_head == NULL)
 		{
 			sql_head = (SqlNode *)malloc(sizeof(SqlNode));
+			if (sql_head == NULL)
+			{
+				fprintf(stderr, "malloc returned NULL, out of memory\n");
+				exit(EXIT_FAILURE);
+			}
 			sql_current = sql_head;
 		}
 		else
 		{
 			sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+			if (sql_current->next == NULL)
+			{
+				fprintf(stderr, "malloc returned NULL, out of memory\n");
+				exit(EXIT_FAILURE);
+			}
 			sql_current = sql_current->next;
 		}
 		char escaped_url[(strlen(url)*2)+1];
