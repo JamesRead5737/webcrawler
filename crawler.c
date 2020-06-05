@@ -464,6 +464,12 @@ html_link_find(char *url, char *html)
 			host1 = get_host_from_url(url);
 			host2 = get_host_from_url(newurl);
 
+			if (host1 == NULL || host2 == NULL)
+			{
+				fprintf(stderr, "malloc returned NULL, out of memory\n");
+                                exit(EXIT_FAILURE);
+			}
+
 			if (strcmp(host1, host2) == 0){
 				sprintf(sql_current->sql, "UPDATE crawled SET links = links + 1 WHERE url = '%s'", escaped_url);
 			}
