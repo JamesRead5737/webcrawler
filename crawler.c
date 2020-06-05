@@ -108,6 +108,11 @@ void
 mysql_start()
 {
 	head = (MysqlNode *)malloc(sizeof(MysqlNode));
+	if (head == NULL)
+	{
+		fprintf(stderr, "malloc returned NULL, out of memory\n");
+		exit(EXIT_FAILURE);
+	}
 	head->mysql_conn = mysql_init(NULL);
 	if (head->mysql_conn == NULL)
 	{
@@ -121,6 +126,11 @@ mysql_start()
 	for (int i = 0; i < MAX_CONNECTIONS; i++)
 	{
 		current->next = (MysqlNode *)malloc(sizeof(MysqlNode));
+		if (current->next == NULL)
+		{
+			fprintf(stderr, "malloc returned NULL, out of memory\n");
+			exit(EXIT_FAILURE);
+		}
 		current = current->next;
 		current->mysql_conn = mysql_init(NULL);
 		if (current->mysql_conn == NULL)
