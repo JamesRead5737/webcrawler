@@ -29,6 +29,7 @@
         case code: s = __STRING(code)
 
 #define MAX_CONNECTIONS 1024
+#define MAX_SQL_CONNECTIONS 1024
 #define ALL_ROWS_FETCHED 0
 #define SELECT_DONE 1
 #define FETCHED_RESULT 2
@@ -39,6 +40,7 @@
 #define BUSY 1
 
 int debug = 0;
+int sql_queue = 0;
 
 /* Global information, common to all connections */
 typedef struct _GlobalInfo
@@ -79,7 +81,7 @@ typedef struct _SockInfo
 
 typedef struct sql_node
 {
-	char sql[8192];
+	char *sql;
 	struct sql_node *next;
 } SqlNode;
 
@@ -129,7 +131,7 @@ mysql_start()
 
 	MysqlNode *current = head;
 
-	for (int i = 0; i < MAX_CONNECTIONS; i++)
+	for (int i = 0; i < MAX_SQL_CONNECTIONS; i++)
 	{
 		current->next = (MysqlNode *)malloc(sizeof(MysqlNode));
 		if (current->next == NULL)
@@ -311,6 +313,18 @@ get_host_from_url(char *url)
         return (newurl);
 }
 
+void
+sql_queue_inc()
+{
+	sql_queue++;
+}
+
+void
+sql_queue_dec()
+{
+	sql_queue--;
+}
+
 char *
 html_title_find(char *html)
 {
@@ -404,7 +418,9 @@ html_mailto_find(char *html)
 		if (!mysql_real_escape_string(mysql_conn, escaped_email, email, strlen(email)))
 		{
 		}
-		int ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "INSERT IGNORE INTO emails (email) VALUES ('%s')", escaped_email);
+		int size = strlen(escaped_email) + strlen("INSERT IGNORE INTO emails (email) VALUES ('')") + 1;
+		sql_current->sql = (char *) malloc (size);
+		int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO emails (email) VALUES ('%s')", escaped_email);
 		if (ret >= 0 && ret < sizeof(sql_current->sql))
 		{
 			
@@ -414,6 +430,7 @@ html_mailto_find(char *html)
 			if (debug)
 				fprintf(stderr, "%s was too large for buffer\n", escaped_email);
 		}
+		sql_queue_inc();
 		sql_current->next = NULL;
 		free(email);
         }
@@ -471,7 +488,9 @@ html_link_find(char *url, char *html)
 			char escaped_url[(strlen(newurl)*2)+1];
 			if (!mysql_real_escape_string(mysql_conn, escaped_url, newurl, strlen(newurl)))
 			{}
-			int ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
+			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + 1;
+			sql_current->sql = (char *) malloc (size);
+			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
 			if (ret >= 0 && ret < sizeof(sql_current->sql))
 			{
 				
@@ -482,6 +501,7 @@ html_link_find(char *url, char *html)
 					fprintf(stderr, "%s was too large for buffer\n", escaped_url);
 			}
 				
+			sql_queue_inc();
 			sql_current->next = NULL;
 			sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
 			if (sql_current->next == NULL)
@@ -502,7 +522,9 @@ html_link_find(char *url, char *html)
 			}
 
 			if (strcmp(host1, host2) == 0){
-				ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "UPDATE crawled SET links = links + 1 WHERE url = '%s'", escaped_url);
+				size = strlen(escaped_url) + strlen("UPDATE crawled SET links = links + 1 WHERE url = ''") + 1;
+				sql_current->sql = (char *) malloc (size);
+				ret = snprintf(sql_current->sql, size, "UPDATE crawled SET links = links + 1 WHERE url = '%s'", escaped_url);
 				if (ret >= 0 && ret < sizeof(sql_current->sql))
 				{
 				
@@ -515,7 +537,9 @@ html_link_find(char *url, char *html)
 			}
 			else
 			{
-				ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "UPDATE crawled SET backlinks = backlinks + 1 WHERE url = '%s'", escaped_url);
+				size = strlen(escaped_url) + strlen("UPDATE crawled SET backlinks = backlinks + 1 WHERE url = ''") + 1;
+				sql_current->sql = (char *) malloc (size);
+				ret = snprintf(sql_current->sql, size, "UPDATE crawled SET backlinks = backlinks + 1 WHERE url = '%s'", escaped_url);
 				if (ret >= 0 && ret < sizeof(sql_current->sql))
 				{
 				
@@ -526,6 +550,7 @@ html_link_find(char *url, char *html)
 						fprintf(stderr, "%s was too large for buffer\n", escaped_url);
 				}
 			}
+			sql_queue_inc();
 			sql_current->next = NULL;
 
 			free(host1);
@@ -578,7 +603,9 @@ html_parse(char *url, char *html)
                 if (!mysql_real_escape_string(mysql_conn, escaped_title, title, strlen(title)))
                 {
                 }
-		int ret = snprintf(sql_current->sql, sizeof(sql_current->sql), "UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_title, escaped_url);
+		int size = strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = ''") + 1;
+		sql_current->sql = (char *) malloc (size);
+		int ret = snprintf(sql_current->sql, size, "UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_title, escaped_url);
 		if (ret >= 0 && ret < sizeof(sql_current->sql))
 		{}
 		else
@@ -586,6 +613,7 @@ html_parse(char *url, char *html)
 			if (debug)
 				fprintf(stderr, "%s and %s too big for buffer\n", escaped_title, escaped_url);
 		}
+		sql_queue_inc();
 		sql_current->next = NULL;
 	}
 
@@ -623,8 +651,8 @@ mcode_or_die(const char *where, CURLMcode code)
 void
 print_progress(GlobalInfo *g)
 {
-	printf("\rParsed sites: %d, %d parallel connections, %d still running, %d transfers\t", 
-			g->parsed_sites, g->concurrent_connections, g->still_running, g->transfers);
+	printf("\rParsed sites: %d, %d parallel connections, %d still running, %d transfers, %d queued SQL queries\t", 
+			g->parsed_sites, g->concurrent_connections, g->still_running, g->transfers, sql_queue);
 	fflush(stdout);
 }
 
@@ -1195,7 +1223,9 @@ crawler_init()
 					SqlNode *sql_tmp = sql_head->next;
 					free(current->sql);
 					current->sql = strdup(sql_head->sql);
-					free(sql_head);
+					free(sql_head->sql);
+					free(sql_head);		
+					sql_queue_dec();
 					sql_head = sql_tmp;
 					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
 				}
@@ -1259,7 +1289,9 @@ crawler_init()
 					SqlNode *sql_tmp = sql_head->next;
 					free(current->sql);
 					current->sql = strdup(sql_head->sql);
+					free(sql_head->sql);
 					free(sql_head);
+					sql_queue_dec();
 					sql_head = sql_tmp;
 					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
 				}
@@ -1313,6 +1345,7 @@ crawler_init()
 			exit(EXIT_FAILURE);
 		}
 		free(sql_head->sql);
+		sql_queue_dec();
 		free(sql_head);
 		sql_head = sql_tmp;
 	}
