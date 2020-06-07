@@ -1142,12 +1142,13 @@ crawler_init()
 				}
 				else
 				{
+					free(global_url);
+					char *url = strdup(row[0]);
 					global_url = strdup(row[0]);
+					//global_url[strlen(row[0])] = '\0';
 					if (debug)
-						printf("url: %s\n", global_url);
-					new_head_conn(global_url, &g);
-					//free(url);
-					//url = NULL;
+						printf("url: %s\n", url);
+					new_head_conn(url, &g);
 				}
                         }
                         else if (status == NET_ASYNC_ERROR)
