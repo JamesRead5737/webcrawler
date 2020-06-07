@@ -106,7 +106,7 @@ int sequence = ALL_ROWS_FETCHED;
 int last_row_fetched = 0;
 char sql[1024] = "SELECT url FROM crawled WHERE frontier = 1 ORDER BY id";
 char delete_sql[8192];
-char *url = NULL;
+char *global_url = NULL;
 
 void
 mysql_start()
@@ -1142,10 +1142,10 @@ crawler_init()
 				}
 				else
 				{
-					url = strdup(row[0]);
+					global_url = strdup(row[0]);
 					if (debug)
-						printf("url: %s\n", url);
-					new_head_conn(url, &g);
+						printf("url: %s\n", global_url);
+					new_head_conn(global_url, &g);
 					//free(url);
 					//url = NULL;
 				}
@@ -1158,12 +1158,12 @@ crawler_init()
 		}
 		else if (sequence == FETCHED_ROW)
 		{
-			if (url != NULL)
+			if (global_url != NULL)
 			{
 				if (debug)
 					printf("Fetched row. Deleting url from frontier\n");
-				char escaped_url[(strlen(url)*2)+1];
-				if (!mysql_real_escape_string(mysql_conn, escaped_url, url, strlen(url)))
+				char escaped_url[(strlen(global_url)*2)+1];
+				if (!mysql_real_escape_string(mysql_conn, escaped_url, global_url, strlen(global_url)))
 				{}
 				int ret = snprintf( delete_sql, sizeof(delete_sql), "UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url);
 				if (ret >= 0 && ret < sizeof(delete_sql))
