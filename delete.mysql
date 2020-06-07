@@ -1,0 +1,3 @@
+USE crawl;
+DROP TABLE crawled;
+DROP TABLE emails;
