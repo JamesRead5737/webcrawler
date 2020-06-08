@@ -105,7 +105,7 @@ enum net_async_status status;
 int sequence = ALL_ROWS_FETCHED;
 int last_row_fetched = 0;
 char sql[1024] = "SELECT url FROM crawled WHERE frontier = 1 ORDER BY id";
-char delete_sql[8192];
+char *delete_sql = NULL;
 char *global_url = NULL;
 
 void
@@ -210,6 +210,7 @@ mysql_stop()
 	}
 
 	mysql_close(mysql_conn);
+	mysql_library_end();
 }
 
 int
@@ -1166,8 +1167,11 @@ crawler_init()
 				char escaped_url[(strlen(global_url)*2)+1];
 				if (!mysql_real_escape_string(mysql_conn, escaped_url, global_url, strlen(global_url)))
 				{}
-				int ret = snprintf( delete_sql, sizeof(delete_sql), "UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url);
-				if (ret >= 0 && ret < sizeof(delete_sql))
+				int size = strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 0 WHERE url = ''") + 1;
+				free(delete_sql);
+				delete_sql = (char *) malloc (size);
+				int ret = snprintf( delete_sql, size, "UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url);
+				if (ret >= 0 && ret < size)
 				{}
 				else
 				{
@@ -1269,6 +1273,9 @@ crawler_init()
 	fprintf(MSG_OUT, "Exiting normally.\n");
 	fflush(MSG_OUT);
  
+	free(global_url);
+	free(delete_sql);
+
 	if (sequence == FETCHED_RESULT || sequence == FETCHED_ROW || sequence == DELETE_DONE)
 	{
 		mysql_free_result(result);
