@@ -22,6 +22,7 @@
 #include <mysqld_error.h>
 #include <curl/curl.h>
 #include <ctype.h>
+#include <wget.h>
 
 #define MSG_OUT stdout
 #define DEFAULT_QUEUE_LENGTH 10000
@@ -231,53 +232,22 @@ starts_with(const char *str, const char *pre)
     return (memcmp(pre, str, lenpre));
 }
 
-char *
-url_sanitize(char *base_url, char *url, int size)
+const char * 
+parseURI (char *base_url, char *url)
 {
-        char *newurl;
-        int base_url_len = strlen(base_url);
-
-        if (starts_with(url, "http") == 0) {
-                newurl = malloc(size+1);
-                if (newurl == NULL) {
-                        fprintf(stderr, "1 malloc() of %d bytes, failed\n", size);
-                        exit(1);
-                }
-
-                strncpy(newurl, url, size);
-                newurl[size] = '\0';
-
-        } else {
-                if (starts_with(url, "//") == 0) {
-                        newurl = malloc(size+7);
-                        if (newurl == NULL) {
-                                fprintf(stderr, "2 malloc() of %d bytes, failed\n", size);
-                                exit(1);
-                        }
-
-                        strncpy(newurl, "https:", 6);
-                        strncpy(newurl+6, url, size);
-                        newurl[size+6] = '\0';
-                } else {
-                        newurl = malloc(base_url_len + size + 2);
-                        if (newurl == NULL) {
-                                fprintf(stderr, "3 malloc() of %d bytes, failed\n", size);
-                                exit(1);
-                        }
-
-                        strncpy(newurl, base_url, base_url_len);
-                        strncpy(newurl + base_url_len, url, size);
-                        newurl[size + base_url_len] = '\0';
-                }
-        }
-
-        return (newurl);
+	wget_iri *base = wget_iri_parse(base_url, NULL);
+	wget_buffer *buf = wget_buffer_alloc(8192);
+	const char *uri = wget_iri_relative_to_abs(base, url, strlen(url), buf);
+	buf->data = NULL;
+	wget_buffer_free(&buf);
+	wget_iri_free(&base);
+	return uri;
 }
 
 char *
 get_host_from_url(char *url)
 {
-        int ret, start = 0, size = 0, i;
+	int ret, start = 0, size = 0, i;
         char *c, *newurl;
 
         if (url == NULL)
@@ -438,9 +408,10 @@ html_mailto_find(char *html)
 }
 
 void
-html_link_find(char *url, char *html)
+html_link_find(char *base_url, char *html)
 {
-        char *first, *last, *newurl;
+        char *first, *last;
+       	const char *newurl;
         int size = 0;
 
         first = html;
@@ -459,10 +430,18 @@ html_link_find(char *url, char *html)
 
 		size = last - first;
 
-		newurl = url_sanitize(url, first, size);
+		//newurl = url_sanitize(url, first, size);
+		char *url;
+                url = malloc(size+1);
+                strncpy(url, first, size);
+                url[size] = '\0';
+		newurl = parseURI(base_url, url);
+		free(url);
+		if (newurl == NULL)
+			continue;
 
 		if (strstr(newurl, "mailto")) {
-			free(newurl);
+			free((char *)newurl);
 			continue;
 		} else {
 			if (sql_head == NULL)
@@ -513,8 +492,8 @@ html_link_find(char *url, char *html)
 			sql_current = sql_current->next;
 
 			char *host1, *host2;
-			host1 = get_host_from_url(url);
-			host2 = get_host_from_url(newurl);
+			host1 = get_host_from_url(base_url);
+			host2 = get_host_from_url((char *)newurl);
 
 			if (host1 == NULL || host2 == NULL)
 			{
@@ -556,7 +535,7 @@ html_link_find(char *url, char *html)
 
 			free(host1);
 			free(host2);
-			free(newurl);
+			free((char *)newurl);
 		}
         }
 }
