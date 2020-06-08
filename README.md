@@ -16,6 +16,6 @@ mysql -u crawler -p < create.mysql
 Program should now be ready to run.
 Install program with command:
 
-gcc crawler.c -g -I/usr/include/mysql -lssl -lcurl -lmysqlclient
+gcc crawler.c -g -I/usr/include/mysql -lssl -lcurl -lmysqlclient -lwget
 
 Path to mysql may differ for your system. Use mysql_config --cflags and mysql_config --libs to discover paths for your system.
