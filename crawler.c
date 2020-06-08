@@ -392,7 +392,7 @@ html_mailto_find(char *html)
 		int size = strlen(escaped_email) + strlen("INSERT IGNORE INTO emails (email) VALUES ('')") + 1;
 		sql_current->sql = (char *) malloc (size);
 		int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO emails (email) VALUES ('%s')", escaped_email);
-		if (ret >= 0 && ret < sizeof(sql_current->sql))
+		if (ret >= 0 && ret <= size)
 		{
 			
 		}
@@ -471,7 +471,7 @@ html_link_find(char *base_url, char *html)
 			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + 1;
 			sql_current->sql = (char *) malloc (size);
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
-			if (ret >= 0 && ret < sizeof(sql_current->sql))
+			if (ret >= 0 && ret <= size)
 			{
 				
 			}
@@ -505,7 +505,7 @@ html_link_find(char *base_url, char *html)
 				size = strlen(escaped_url) + strlen("UPDATE crawled SET links = links + 1 WHERE url = ''") + 1;
 				sql_current->sql = (char *) malloc (size);
 				ret = snprintf(sql_current->sql, size, "UPDATE crawled SET links = links + 1 WHERE url = '%s'", escaped_url);
-				if (ret >= 0 && ret < sizeof(sql_current->sql))
+				if (ret >= 0 && ret <= size)
 				{
 				
 				}
@@ -520,7 +520,7 @@ html_link_find(char *base_url, char *html)
 				size = strlen(escaped_url) + strlen("UPDATE crawled SET backlinks = backlinks + 1 WHERE url = ''") + 1;
 				sql_current->sql = (char *) malloc (size);
 				ret = snprintf(sql_current->sql, size, "UPDATE crawled SET backlinks = backlinks + 1 WHERE url = '%s'", escaped_url);
-				if (ret >= 0 && ret < sizeof(sql_current->sql))
+				if (ret >= 0 && ret <= size)
 				{
 				
 				}
@@ -586,7 +586,7 @@ html_parse(char *url, char *html)
 		int size = strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = ''") + 1;
 		sql_current->sql = (char *) malloc (size);
 		int ret = snprintf(sql_current->sql, size, "UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_title, escaped_url);
-		if (ret >= 0 && ret < sizeof(sql_current->sql))
+		if (ret >= 0 && ret <= size)
 		{}
 		else
 		{
@@ -1150,7 +1150,7 @@ crawler_init()
 				free(delete_sql);
 				delete_sql = (char *) malloc (size);
 				int ret = snprintf( delete_sql, size, "UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url);
-				if (ret >= 0 && ret < size)
+				if (ret >= 0 && ret <= size)
 				{}
 				else
 				{
