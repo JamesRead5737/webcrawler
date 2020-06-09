@@ -1103,8 +1103,9 @@ crawler_init()
 			} 
 			else if (status == NET_ASYNC_ERROR)
 			{
-				fprintf(stderr, "mysql_real_query_nonblocking: %s sql: %s",mysql_error(mysql_conn), sql);
-				exit(EXIT_FAILURE);
+				fprintf(stderr, "mysql_real_query_nonblocking: %s errno: %d sql: %s",mysql_error(mysql_conn), mysql_errno(mysql_conn), sql);
+				//exit(EXIT_FAILURE);
+				mysql_start();
 			}
 		} 
 		else if (sequence == SELECT_DONE) 
