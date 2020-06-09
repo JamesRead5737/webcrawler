@@ -1103,7 +1103,7 @@ crawler_init()
 			} 
 			else if (status == NET_ASYNC_ERROR)
 			{
-				fprintf(stderr, "mysql_real_query_nonblocking: %s",mysql_error(mysql_conn));
+				fprintf(stderr, "mysql_real_query_nonblocking: %s sql: %s",mysql_error(mysql_conn), sql);
 				exit(EXIT_FAILURE);
 			}
 		} 
@@ -1241,7 +1241,7 @@ crawler_init()
 				}
 				else if (current->status == NET_ASYNC_ERROR)
 				{
-					fprintf(stderr, "mysql_real_query_nonblocking: %s\n", mysql_error(current->mysql_conn));
+					fprintf(stderr, "mysql_real_query_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
                                         exit(EXIT_FAILURE);
 				}
 			}
@@ -1311,7 +1311,7 @@ crawler_init()
 				}
 				else if (current->status == NET_ASYNC_ERROR)
 				{
-					fprintf(stderr, "mysql_real_query_nonblocking: %s\n", mysql_error(current->mysql_conn));
+					fprintf(stderr, "mysql_real_query_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
                                         exit(EXIT_FAILURE);
 				}
 			}
