@@ -1259,6 +1259,8 @@ crawler_init()
 			if (errno == EINTR) {
 				fprintf(MSG_OUT, "note: wait interrupted\n");
 				continue;
+			} else if (errno == EAGAIN) {
+				perror("epoll_wait");
 			} else {
 				perror("epoll_wait");
 				exit(1);
