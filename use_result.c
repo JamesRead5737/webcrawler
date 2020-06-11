@@ -454,6 +454,12 @@ html_link_find(char *base_url, char *html)
                 strncpy(url, first, size);
                 url[size] = '\0';
 		newurl = parseURI(base_url, url);
+		if (debug)
+		{
+			fprintf(stderr, "base_url: %s\n", base_url);
+			fprintf(stderr, "url: %s\n", url);
+			fprintf(stderr, "newurl: %s\n", newurl);
+		}
 		free(url);
 		if (newurl == NULL)
 			continue;
@@ -1084,7 +1090,7 @@ crawler_init()
 	/* we don't call any curl_multi_socket*() function yet as we have no handles added! */ 
 
 	if (debug)
-		printf("Starting crawler...\n");
+		fprintf(stderr, "Starting crawler...\n");
 
 	while (!should_exit) {
 		int idx;
@@ -1094,7 +1100,7 @@ crawler_init()
 		if (sequence == ALL_ROWS_FETCHED)
 		{
 			if (debug)
-				printf("Doing select\n");
+				fprintf(stderr, "Doing select\n");
 			status = mysql_real_query_nonblocking(mysql_conn, sql, (unsigned long)strlen(sql));
 
 			if (status == NET_ASYNC_COMPLETE)
@@ -1117,7 +1123,7 @@ crawler_init()
 		else if (sequence == SELECT_DONE) 
 		{	
 			if (debug)
-				printf("Select done. Storing result\n");
+				fprintf(stderr, "Select done. Storing result\n");
 			result = mysql_use_result(mysql_conn);
 
                         if (result == NULL)
@@ -1133,7 +1139,7 @@ crawler_init()
 		else if (sequence == FETCHED_RESULT)
 		{
 			if (debug)
-				printf("Result stored. Fetching row\n");
+				fprintf(stderr, "Result stored. Fetching row\n");
 			status = mysql_fetch_row_nonblocking(result, &row);
 
 			if (status == NET_ASYNC_COMPLETE)
@@ -1142,7 +1148,7 @@ crawler_init()
 				if (row == NULL)
 				{
 					if (debug)
-						printf("No more rows.\n");
+						fprintf(stderr, "No more rows.\n");
 					last_row_fetched = 1;
 				}
 				else
@@ -1152,7 +1158,7 @@ crawler_init()
 					global_url = strdup(row[0]);
 					//global_url[strlen(row[0])] = '\0';
 					if (debug)
-						printf("url: %s\n", url);
+						fprintf(stderr, "url: %s\n", url);
 					new_head_conn(url, &g);
 				}
                         }
@@ -1167,7 +1173,7 @@ crawler_init()
 			if (global_url != NULL)
 			{
 				if (debug)
-					printf("Fetched row. Deleting url from frontier\n");
+					fprintf(stderr, "Fetched row. Deleting url from frontier\n");
 				char escaped_url[(strlen(global_url)*2)+1];
 				if (!mysql_real_escape_string(mysql_delete_conn, escaped_url, global_url, strlen(global_url)))
 				{}
