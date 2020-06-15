@@ -779,7 +779,7 @@ html_parse(char *url, char *html)
 		if (has_ads(html))
 		{
 			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('');") + 
-				strlen("UPDATE crawled SET frontier = 1 WHERE url = '';") +
+				strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 1 WHERE url = '';") +
 				strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = '';") +
 				strlen(escaped_url) + strlen("UPDATE crawled SET ads = 1 WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
@@ -799,7 +799,7 @@ html_parse(char *url, char *html)
 		else
 		{
 			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('');") + 
-				strlen("UPDATE crawled SET frontier = 1 WHERE url = '';") +
+				strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 1 WHERE url = '';") +
 				strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 1 WHERE url = '%s';UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_url, escaped_url, escaped_title, escaped_url);
@@ -821,7 +821,7 @@ html_parse(char *url, char *html)
 		if (has_ads(html))
 		{
 			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('');") + 
-				strlen("UPDATE crawled SET frontier = 1 WHERE url = '';") +
+				strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 1 WHERE url = '';") +
 				strlen(escaped_url) + strlen("UPDATE crawled SET ads = 1 WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 1 WHERE url = '%s';UPDATE crawled SET ads = 1 WHERE url = '%s'", escaped_url, escaped_url, escaped_url);
@@ -839,7 +839,7 @@ html_parse(char *url, char *html)
 		}
 		else
 		{
-			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + strlen("UPDATE crawled SET frontier = 1 WHERE url = ''") + 1;
+			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 1 WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 1 WHERE url = '%s'", escaped_url, escaped_url);
 			if (ret >= 0 && ret <= size)
