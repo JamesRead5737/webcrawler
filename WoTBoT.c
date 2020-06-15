@@ -92,6 +92,7 @@ SqlNode *sql_current;
 typedef struct mysql_node
 {
 	MYSQL *mysql_conn;
+	MYSQL_RES *result;
 	enum net_async_status status;
 	char *sql;
 	int sequence;
@@ -174,7 +175,7 @@ mysql_start()
 	current = head;
 	while (current != NULL)
 	{
-		current->status = mysql_real_connect_nonblocking(current->mysql_conn, "localhost", "crawler", "1q2w3e4r", "crawl", 0, NULL, 0);
+		current->status = mysql_real_connect_nonblocking(current->mysql_conn, "localhost", "crawler", "1q2w3e4r", "crawl", 0, NULL, CLIENT_MULTI_STATEMENTS);
 		current = current->next;
 	}
 
@@ -184,7 +185,7 @@ mysql_start()
 	current = head;
 	while (current != NULL)
 	{
-		while (current->status = mysql_real_connect_nonblocking(current->mysql_conn, "localhost", "crawler", "1q2w3e4r", "crawl", 0, NULL, 0) == NET_ASYNC_NOT_READY)
+		while (current->status = mysql_real_connect_nonblocking(current->mysql_conn, "localhost", "crawler", "1q2w3e4r", "crawl", 0, NULL, CLIENT_MULTI_STATEMENTS) == NET_ASYNC_NOT_READY)
 			/* empty loop */
 		if (current->status == NET_ASYNC_ERROR)
 		{
@@ -570,6 +571,173 @@ parsed_sites_inc(GlobalInfo *g)
         g->parsed_sites++;
 }
 
+// These are looked after <script ..and before </script keywords
+char AD_TAGS[][100] = {
+	"googleads",
+	"google_ad_client",
+	"adsbygoogle",
+	//"googlesyndication",
+	//"moatads.com", //MOAT ADS
+	"bat.bing.com/action", // THIS IS MODIFIED. Check the bat.js comment immediately below this array
+	// DON'T REMOVE this one.
+	"pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+	"contextual.media.net/dmedianet.js"
+};
+//"bat.bing.com/bat.js" // DONT add this. // bat.bing.com is for advertisement, whereas bat.bing.com/bat.js contains UET
+	// UET : Universal Event Tracking allows microsoft to track user events and manipulate it in order to show
+	// interest based ads maybe on other sites. You may visit bat.bing.com/bat/js and see there is not any ad related thing. // Probably to show up in bing search engine. They don't contain script, instead bing webpage is
+// processed on server and then sent. It does not has ad scripts. But can show ads because they came from server.
+// I think the server looks for UET in many sites.
+
+// These are looked after <img or <p or <div ... (before tag closing) ... onlickOrSrcOrSomething="https:...googleads.g.doubleclick.net"
+char AD_RENDERED[][100] = {
+	"g.doubleclick.net",
+	"google_ads_iframe_",
+	"google_ads",
+	"yap_ad" // Yahoo ad, needs more sources
+
+};
+
+/* Cross origins are the techniques that allow the use of externel sources (CORS) within img, script etc */
+char CROSS_ORIGINS[][100] = {
+	"node.setAttribute('crossorigin', 'anonymous')",
+	"node.setAttribute('crossorigin','anonymous')",
+
+};
+//char tagSeparatorStart = '<';
+#define EndOfString '\0'
+typedef int BOOL;
+#define TRUE 1
+#define FALSE 0  // CHANGE THIS FALSE TO OTHER NAME BEFORE USING (IF DEFINED A FALSE typedef as #define FALSE 0)
+
+
+int is_alphabet(char ch)
+{
+	// I dont think I should use char c = 32 and then bitwise it. There are symbols in html
+	char* abcString = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	for (int i = 0; i < 26; i++)
+	{
+		if (abcString[i] == ch)
+			return 1;
+	}
+	return 0;
+}
+
+// REMOVE is_alphabet if you are sure that all html files will be lowercase
+int compareNumberOfChar(char* str1, char* str2, int numberfromstr1)
+{
+	int j = 0;
+	for (int i = 0; i < numberfromstr1; i++)
+	{
+		if (str1[i] == EndOfString && j > 0)
+			break;
+		if (is_alphabet(str1[i]) && is_alphabet(str2[i]))
+		{
+			if ((str1[i] | 32) != (str2[i] | 32))
+				return 0;
+			j++; // It didn't work as j++ in j > 0 statement
+			continue;
+		}
+		if (str1[i] != str2[i])
+		{
+			return 0;
+		}
+		j++;
+	}
+	return 1;
+}
+
+BOOL WithinScript = FALSE;
+BOOL WithinTag = FALSE;
+//char STRDOUBTED[100];
+int has_ads(char* fileContents)
+{
+	char* scriptStart = "<script"; // don't make it <script>
+	char* scriptEnd = "</script";
+
+
+
+	char* reader = fileContents;
+	BOOL noscriptFound = TRUE;
+	BOOL foundOne = FALSE;
+	while ((reader[0]) != EndOfString)
+	{
+		if (compareNumberOfChar(reader, "<", 1)/* && !compareNumberOfChar("<noscript>", reader, 10)*/)
+			WithinTag = TRUE;
+
+		if (WithinTag == TRUE)
+		{
+			if (compareNumberOfChar("noscript", reader, 10))
+			{
+				/*WithinTag = FALSE;*/
+				noscriptFound = TRUE;
+			}
+			if (compareNumberOfChar("/noscript", reader, 10))
+			{
+				/*WithinTag = FALSE;*/
+				noscriptFound = FALSE;
+			}
+			if (!noscriptFound)
+			for (int i = 0; i < (sizeof(AD_RENDERED) / 100); i++)
+			{
+				char* gh = AD_RENDERED[i];
+				if (compareNumberOfChar(gh, reader, sizeof(AD_RENDERED[i])))
+				{
+					/*return 1;*/
+					foundOne = TRUE;
+				}
+			}
+		}
+
+		/* ONLY CHECK CrossOrgin inside the script tag. Not here*/
+		if (compareNumberOfChar(reader, ">", 1))
+		{
+			WithinTag = FALSE;
+		}
+
+		if (compareNumberOfChar(reader, scriptStart, 7))
+			WithinScript = TRUE;
+
+
+		if (WithinScript == TRUE)
+		{
+			//printf("Got a script tag\n");
+			//WithinScript = UNKNOWN;
+			// Do search work
+			for (int i = 0; i < (sizeof(AD_TAGS) / 100); i++)
+			{
+				char* gh = AD_TAGS[i];
+				if (compareNumberOfChar(gh, reader, sizeof(AD_TAGS[i])))
+				{
+					foundOne = TRUE;
+				}
+
+			}
+
+			for (int i = 0; i < (sizeof(CROSS_ORIGINS) / 100); i++)
+			{
+				char* gh = CROSS_ORIGINS[i];
+				if (compareNumberOfChar(gh, reader, sizeof(CROSS_ORIGINS[i])))
+				{
+					foundOne = FALSE;
+				}
+			}
+
+
+		}
+		if (compareNumberOfChar(reader, scriptEnd, 8))
+		{
+			WithinScript = FALSE;
+		}
+
+		++reader;
+	}
+	if (foundOne)
+		return 1;
+	return 0; // No Ad upto end of page
+	//printf("Got end of string\n");
+}
+
 void
 html_parse(char *url, char *html)
 {
@@ -577,48 +745,112 @@ html_parse(char *url, char *html)
 	
 	title = html_title_find(html);
 
-	if (title != NULL)
-        {
+	if (sql_head == NULL)
+	{
+		sql_head = (SqlNode *)malloc(sizeof(SqlNode));
 		if (sql_head == NULL)
 		{
-			sql_head = (SqlNode *)malloc(sizeof(SqlNode));
-			if (sql_head == NULL)
-			{
-				fprintf(stderr, "malloc returned NULL, out of memory\n");
-				exit(EXIT_FAILURE);
-			}
-			sql_current = sql_head;
+			fprintf(stderr, "malloc returned NULL, out of memory\n");
+			exit(EXIT_FAILURE);
 		}
-		else
+		sql_current = sql_head;
+	}
+	else
+	{
+		sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+		if (sql_current->next == NULL)
 		{
-			sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
-			if (sql_current->next == NULL)
-			{
-				fprintf(stderr, "malloc returned NULL, out of memory\n");
-				exit(EXIT_FAILURE);
-			}
-			sql_current = sql_current->next;
+			fprintf(stderr, "malloc returned NULL, out of memory\n");
+			exit(EXIT_FAILURE);
 		}
-		char escaped_url[(strlen(url)*2)+1];
-		if (!mysql_real_escape_string(mysql_conn, escaped_url, url, strlen(url)))
-        	{
-        	}
+		sql_current = sql_current->next;
+	}
+	char escaped_url[(strlen(url)*2)+1];
+	if (!mysql_real_escape_string(mysql_conn, escaped_url, url, strlen(url)))
+	{
+	}
+	if (title != NULL)
+        {
                 char escaped_title[(strlen(title)*2)+1];
                 if (!mysql_real_escape_string(mysql_conn, escaped_title, title, strlen(title)))
                 {
                 }
-		int size = strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = ''") + 1;
-		sql_current->sql = (char *) malloc (size);
-		int ret = snprintf(sql_current->sql, size, "UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_title, escaped_url);
-		if (ret >= 0 && ret <= size)
-		{}
+
+		if (has_ads(html))
+		{
+			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('');") + 
+				strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = '';") +
+				strlen(escaped_url) + strlen("UPDATE crawled SET ads = 1 WHERE url = ''") + 1;
+			sql_current->sql = (char *) malloc (size);
+			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET title = '%s' WHERE url = '%s';UPDATE crawled SET ads = 1 WHERE url = '%s'", escaped_url, escaped_title, escaped_url, escaped_url);
+			if (ret >= 0 && ret <= size)
+			{}
+			else
+			{
+				if (debug)
+					fprintf(stderr, "%s too big for buffer\n", escaped_url);
+			}	
+			sql_queue_inc();
+			sql_current->next = NULL;
+			if (debug)
+				fprintf(stderr, "Inserting %s, Updating title %s, Setting ads = 1\n", url, title);
+		}
 		else
 		{
+			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('');") + 
+				strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = ''") + 1;
+			sql_current->sql = (char *) malloc (size);
+			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_url, escaped_title, escaped_url);
+			if (ret >= 0 && ret <= size)
+			{}
+			else
+			{
+				if (debug)
+					fprintf(stderr, "%s too big for buffer\n", escaped_url);
+			}	
+			sql_queue_inc();
+			sql_current->next = NULL;
 			if (debug)
-				fprintf(stderr, "%s and %s too big for buffer\n", escaped_title, escaped_url);
+				fprintf(stderr, "Inserting %s, Updating title %s\n", url, title);
 		}
-		sql_queue_inc();
-		sql_current->next = NULL;
+	}
+	else
+	{
+		if (has_ads(html))
+		{
+			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('');") + 
+				strlen(escaped_url) + strlen("UPDATE crawled SET ads = 1 WHERE url = ''") + 1;
+			sql_current->sql = (char *) malloc (size);
+			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET ads = 1 WHERE url = '%s'", escaped_url, escaped_url);
+			if (ret >= 0 && ret <= size)
+			{}
+			else
+			{
+				if (debug)
+					fprintf(stderr, "%s too big for buffer\n", escaped_url);
+			}	
+			sql_queue_inc();
+			sql_current->next = NULL;
+			if (debug)
+				fprintf(stderr, "Inserting %s, Setting ads = 1\n", url);
+		}
+		else
+		{
+			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + 1;
+			sql_current->sql = (char *) malloc (size);
+			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
+			if (ret >= 0 && ret <= size)
+			{}
+			else
+			{
+				if (debug)
+					fprintf(stderr, "%s too big for buffer\n", escaped_url);
+			}	
+			sql_queue_inc();
+			sql_current->next = NULL;
+			if (debug)
+				fprintf(stderr, "Inserting %s\n", url);
+		}
 	}
 
 	//html_link_find(url, html);
@@ -1245,6 +1477,9 @@ crawler_init()
 					sql_queue_dec();
 					sql_head = sql_tmp;
 					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
+					current->sequence = BUSY;
+					if (debug)
+						fprintf(stderr, "Query %s\n", current->sql);
 				}
 			}
 			else if (current->sequence == BUSY)
@@ -1253,6 +1488,13 @@ crawler_init()
 				if (current->status == NET_ASYNC_COMPLETE)
 				{
 					current->sequence = READY;
+					if (debug)
+						fprintf(stderr, "Done query %s\n", current->sql);
+					do
+					{
+						current->result = mysql_store_result(current->mysql_conn);
+						mysql_free_result(current->result);
+					} while (mysql_next_result(current->mysql_conn) == 0);
 				}
 				else if (current->status == NET_ASYNC_ERROR)
 				{
@@ -1316,6 +1558,7 @@ crawler_init()
 					sql_queue_dec();
 					sql_head = sql_tmp;
 					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
+					current->sequence = BUSY;
 				}
 			}
 			else if (current->sequence == BUSY)
@@ -1325,6 +1568,13 @@ crawler_init()
 				if (current->status == NET_ASYNC_COMPLETE)
 				{
 					current->sequence = READY;
+					if (debug)
+						fprintf(stderr, "Done query %s\n", current->sql);
+					do
+					{
+						current->result = mysql_store_result(current->mysql_conn);
+						mysql_free_result(current->result);
+					} while (mysql_next_result(current->mysql_conn) == 0);
 				}
 				else if (current->status == NET_ASYNC_ERROR)
 				{
