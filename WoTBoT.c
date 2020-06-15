@@ -1162,7 +1162,7 @@ new_head_conn(char *url, GlobalInfo *g)
 	curl_easy_setopt(conn->easy, CURLOPT_CONNECTTIMEOUT, 10L);
 	curl_easy_setopt(conn->easy, CURLOPT_CLOSESOCKETDATA, g);
 	curl_easy_setopt(conn->easy, CURLOPT_NOBODY, 1L);
-	curl_easy_setopt(conn->easy, CURLOPT_USERAGENT, "WoTBoT (http://wottot.com/WoTBoT.html");
+	curl_easy_setopt(conn->easy, CURLOPT_USERAGENT, "WoTBoT (http://wottot.com/WoTBoT.html)");
 
 	rc = curl_multi_add_handle(g->multi, conn->easy);
 	mcode_or_die("new_conn: curl_multi_add_handle", rc);
@@ -1207,7 +1207,7 @@ new_body_conn(char *url, GlobalInfo *g)
         curl_easy_setopt(conn->easy, CURLOPT_LOW_SPEED_LIMIT, 100L);
         curl_easy_setopt(conn->easy, CURLOPT_CONNECTTIMEOUT, 10L);
         curl_easy_setopt(conn->easy, CURLOPT_CLOSESOCKETDATA, g);
-	curl_easy_setopt(conn->easy, CURLOPT_USERAGENT, "WoTBoT (http://wottot.com/WoTBoT.html");
+	curl_easy_setopt(conn->easy, CURLOPT_USERAGENT, "WoTBoT (http://wottot.com/WoTBoT.html)");
 
         rc = curl_multi_add_handle(g->multi, conn->easy);
         mcode_or_die("new_conn: curl_multi_add_handle", rc);
