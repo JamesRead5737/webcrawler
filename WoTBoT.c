@@ -227,15 +227,16 @@ mysql_stop()
 	{
 		MysqlNode *next = current->next;
 		mysql_close(current->mysql_conn);
-		memory -= strlen(current->sql);
+		if (current->sql != NULL)
+			memory -= strlen(current->sql);
 		memory -= sizeof(MysqlNode);
 		free(current->sql);
 		free(current);
 		current = next;
 	}
 
+	mysql_close(mysql_delete_conn);
 	mysql_close(mysql_conn);
-	mysql_library_end();
 }
 
 int
@@ -1392,6 +1393,7 @@ crawler_init()
 			{
 				if (mysql_errno(mysql_conn) == CR_SERVER_GONE_ERROR)
 				{
+					mysql_stop();
 					mysql_start();
 				}
 				else
@@ -1612,7 +1614,8 @@ crawler_init()
 				if(sql_head != NULL)
 				{
 					SqlNode *sql_tmp = sql_head->next;
-					memory -= strlen(current->sql);
+					if (current->sql != NULL)
+						memory -= strlen(current->sql);
 					free(current->sql);
 					current->sql = strdup(sql_head->sql);
 					memory -= strlen(sql_head->sql);
@@ -1678,7 +1681,7 @@ crawler_init()
 		if (mysql_real_query(mysql_conn, sql_head->sql, (unsigned long)strlen(sql_head->sql)))
 		{
 			fprintf(stderr, "mysql_real_query failed: %s", mysql_error(mysql_conn));
-			exit(EXIT_FAILURE);
+			//exit(EXIT_FAILURE);
 		}
 		memory -= strlen(sql_head->sql);
 		memory -= sizeof(SqlNode);
@@ -1720,6 +1723,7 @@ main(int argc, char **argv)
 	mysql_start();
 	crawler_init();
 	mysql_stop();
+	mysql_library_end();
 
 
 	printf("Exiting.\n");
