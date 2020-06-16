@@ -111,6 +111,7 @@ int last_row_fetched = 0;
 char sql[1024] = "SELECT url FROM crawled WHERE frontier = 1 ORDER BY id";
 char *delete_sql = NULL;
 char *global_url = NULL;
+int memory = 0;
 
 void
 mysql_start()
@@ -119,6 +120,7 @@ mysql_start()
 		fprintf(stderr, "Calling mysql_init on all nodes.\n");
 
 	head = (MysqlNode *)malloc(sizeof(MysqlNode));
+	memory += sizeof(MysqlNode);
 	if (head == NULL)
 	{
 		fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -138,6 +140,7 @@ mysql_start()
 	for (int i = 0; i < MAX_SQL_CONNECTIONS; i++)
 	{
 		current->next = (MysqlNode *)malloc(sizeof(MysqlNode));
+		memory += sizeof(MysqlNode);
 		if (current->next == NULL)
 		{
 			fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -224,6 +227,8 @@ mysql_stop()
 	{
 		MysqlNode *next = current->next;
 		mysql_close(current->mysql_conn);
+		memory -= strlen(current->sql);
+		memory -= sizeof(MysqlNode);
 		free(current->sql);
 		free(current);
 		current = next;
@@ -257,6 +262,7 @@ parseURI (char *base_url, char *url)
 	wget_iri *base = wget_iri_parse(base_url, NULL);
 	wget_buffer *buf = wget_buffer_alloc(8192);
 	const char *uri = wget_iri_relative_to_abs(base, url, strlen(url), buf);
+	memory += strlen(uri);
 	buf->data = NULL;
 	wget_buffer_free(&buf);
 	wget_iri_free(&base);
@@ -296,6 +302,7 @@ get_host_from_url(char *url)
 
         memcpy(newurl, url+start, size);
         newurl[size] = '\0';
+	memory += strlen(newurl);
 
         for (i = 0; i < strlen(newurl); i++)
                 newurl[i] = tolower(newurl[i]);
@@ -341,6 +348,7 @@ html_title_find(char *html)
 
         strncpy(newurl, first, size);
         newurl[size] = '\0';
+	memory += strlen(newurl);
 
         return (newurl);
 }
@@ -382,10 +390,12 @@ html_mailto_find(char *html)
                 }
 
                 email = strndup(first, size);
+		memory += strlen(email);
 
 		if (sql_head == NULL)
                 {
                         sql_head = (SqlNode *)malloc(sizeof(SqlNode));
+			memory += sizeof(SqlNode);
 			if (sql_head == NULL)
 			{
 				fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -396,6 +406,7 @@ html_mailto_find(char *html)
                 else
                 {
                         sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+			memory += sizeof(SqlNode);
 			if (sql_current->next == NULL)
 			{
 				fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -410,6 +421,7 @@ html_mailto_find(char *html)
 		}
 		int size = strlen(escaped_email) + strlen("INSERT IGNORE INTO emails (email) VALUES ('')") + 1;
 		sql_current->sql = (char *) malloc (size);
+		memory += size;
 		int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO emails (email) VALUES ('%s')", escaped_email);
 		if (ret >= 0 && ret <= size)
 		{
@@ -422,6 +434,7 @@ html_mailto_find(char *html)
 		}
 		sql_queue_inc();
 		sql_current->next = NULL;
+		memory -= strlen(email);
 		free(email);
         }
 }
@@ -454,6 +467,7 @@ html_link_find(char *base_url, char *html)
                 url = malloc(size+1);
                 strncpy(url, first, size);
                 url[size] = '\0';
+		memory += strlen(url);
 		newurl = parseURI(base_url, url);
 		if (debug)
 		{
@@ -461,6 +475,7 @@ html_link_find(char *base_url, char *html)
 			fprintf(stderr, "url: %s\n", url);
 			fprintf(stderr, "newurl: %s\n", newurl);
 		}
+		memory -= strlen(url);
 		free(url);
 		if (newurl == NULL)
 			continue;
@@ -472,6 +487,7 @@ html_link_find(char *base_url, char *html)
 			if (sql_head == NULL)
 			{
 				sql_head = (SqlNode *)malloc(sizeof(SqlNode));
+				memory += sizeof(SqlNode);
 				if (sql_head == NULL)
 				{
 					fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -482,6 +498,7 @@ html_link_find(char *base_url, char *html)
                 	else
                 	{
                 	        sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+				memory += sizeof(SqlNode);
 				if (sql_current->next == NULL)
 				{
 					fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -495,6 +512,7 @@ html_link_find(char *base_url, char *html)
 			{}
 			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + 1;
 			sql_current->sql = (char *) malloc (size);
+			memory += size;
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s')", escaped_url);
 			if (ret >= 0 && ret <= size)
 			{
@@ -509,6 +527,7 @@ html_link_find(char *base_url, char *html)
 			sql_queue_inc();
 			sql_current->next = NULL;
 			sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+			memory += sizeof(SqlNode);
 			if (sql_current->next == NULL)
 			{
 				fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -519,6 +538,8 @@ html_link_find(char *base_url, char *html)
 			char *host1, *host2;
 			host1 = get_host_from_url(base_url);
 			host2 = get_host_from_url((char *)newurl);
+			memory += strlen(host1);
+			memory += strlen(host2);
 
 			if (host1 == NULL || host2 == NULL)
 			{
@@ -529,6 +550,7 @@ html_link_find(char *base_url, char *html)
 			if (strcmp(host1, host2) == 0){
 				size = strlen(escaped_url) + strlen("UPDATE crawled SET links = links + 1 WHERE url = ''") + 1;
 				sql_current->sql = (char *) malloc (size);
+				memory += size;
 				ret = snprintf(sql_current->sql, size, "UPDATE crawled SET links = links + 1 WHERE url = '%s'", escaped_url);
 				if (ret >= 0 && ret <= size)
 				{
@@ -544,6 +566,7 @@ html_link_find(char *base_url, char *html)
 			{
 				size = strlen(escaped_url) + strlen("UPDATE crawled SET backlinks = backlinks + 1 WHERE url = ''") + 1;
 				sql_current->sql = (char *) malloc (size);
+				memory += size;
 				ret = snprintf(sql_current->sql, size, "UPDATE crawled SET backlinks = backlinks + 1 WHERE url = '%s'", escaped_url);
 				if (ret >= 0 && ret <= size)
 				{
@@ -558,6 +581,9 @@ html_link_find(char *base_url, char *html)
 			sql_queue_inc();
 			sql_current->next = NULL;
 
+			memory -= strlen(host1);
+			memory -= strlen(host2);
+			memory -= strlen(newurl);
 			free(host1);
 			free(host2);
 			free((char *)newurl);
@@ -748,6 +774,7 @@ html_parse(char *url, char *html)
 	if (sql_head == NULL)
 	{
 		sql_head = (SqlNode *)malloc(sizeof(SqlNode));
+		memory += sizeof(SqlNode);
 		if (sql_head == NULL)
 		{
 			fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -758,6 +785,7 @@ html_parse(char *url, char *html)
 	else
 	{
 		sql_current->next = (SqlNode *)malloc(sizeof(SqlNode));
+		memory += sizeof(SqlNode);
 		if (sql_current->next == NULL)
 		{
 			fprintf(stderr, "malloc returned NULL, out of memory\n");
@@ -783,6 +811,7 @@ html_parse(char *url, char *html)
 				strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = '';") +
 				strlen(escaped_url) + strlen("UPDATE crawled SET ads = 1 WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
+			memory += size;
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 0 WHERE url = '%s';UPDATE crawled SET title = '%s' WHERE url = '%s';UPDATE crawled SET ads = 1 WHERE url = '%s'", escaped_url, escaped_url, escaped_title, escaped_url, escaped_url);
 			if (ret >= 0 && ret <= size)
 			{}
@@ -802,6 +831,7 @@ html_parse(char *url, char *html)
 				strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 0 WHERE url = '';") +
 				strlen(escaped_url) + strlen(escaped_title) + strlen("UPDATE crawled SET title = '' WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
+			memory += size;
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 0 WHERE url = '%s';UPDATE crawled SET title = '%s' WHERE url = '%s'", escaped_url, escaped_url, escaped_title, escaped_url);
 			if (ret >= 0 && ret <= size)
 			{}
@@ -824,6 +854,7 @@ html_parse(char *url, char *html)
 				strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 0 WHERE url = '';") +
 				strlen(escaped_url) + strlen("UPDATE crawled SET ads = 1 WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
+			memory += size;
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 0 WHERE url = '%s';UPDATE crawled SET ads = 1 WHERE url = '%s'", escaped_url, escaped_url, escaped_url);
 			if (ret >= 0 && ret <= size)
 			{}
@@ -841,6 +872,7 @@ html_parse(char *url, char *html)
 		{
 			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 0 WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
+			memory += size;
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url, escaped_url);
 			if (ret >= 0 && ret <= size)
 			{}
@@ -858,6 +890,8 @@ html_parse(char *url, char *html)
 
 	//html_link_find(url, html);
 	html_mailto_find(html);
+	if (title != NULL)
+		memory -= strlen(title);
 	free(title);
 }
 
@@ -890,8 +924,8 @@ mcode_or_die(const char *where, CURLMcode code)
 void
 print_progress(GlobalInfo *g)
 {
-	printf("\rParsed sites: %d, %d parallel connections, %d still running, %d transfers, %d queued SQL queries\t", 
-			g->parsed_sites, g->concurrent_connections, g->still_running, g->transfers, sql_queue);
+	printf("\rParsed sites: %d, %d parallel connections, %d still running, %d transfers, %d queued SQL queries, %d bytes allocated\t", 
+			g->parsed_sites, g->concurrent_connections, g->still_running, g->transfers, sql_queue, memory);
 	fflush(stdout);
 }
 
@@ -989,6 +1023,10 @@ check_multi_info(GlobalInfo *g)
 			curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &response_code);
 			curl_easy_getinfo(easy, CURLINFO_HEADER_SIZE, &header_size);
 
+			//memory += strlen(conn->url);
+			//memory += strlen(conn->data);
+			//memory += sizeof(conn);
+
 			if (response_code == 200 && dl == 0.0 && (starts_with(ct, "text/html") || starts_with(ct, "text/plain")))
 			{
 				/* This should be a response to our HEAD request */
@@ -1004,6 +1042,9 @@ check_multi_info(GlobalInfo *g)
 			//fprintf(MSG_OUT, "DONE: %s => (%d) %s\n", eff_url, res, conn->error);
 
 			curl_multi_remove_handle(g->multi, easy);
+			//memory -= strlen(conn->url);
+			//memory -= strlen(conn->data);
+			//memory -= sizeof(conn);
 			free(conn->url);
 			free(conn->data);
 			curl_easy_cleanup(easy);
@@ -1147,6 +1188,8 @@ new_head_conn(char *url, GlobalInfo *g)
 
 	conn->global = g;
 	conn->url = strdup(url);
+	memory += strlen(conn->url);
+	memory -= strlen(url);
 	free(url);
 	curl_easy_setopt(conn->easy, CURLOPT_URL, conn->url);
 	curl_easy_setopt(conn->easy, CURLOPT_WRITEFUNCTION, write_cb);
@@ -1193,6 +1236,7 @@ new_body_conn(char *url, GlobalInfo *g)
 
         conn->global = g;
         conn->url = strdup(url);
+	memory += strlen(conn->url);
 	//free(url);
         curl_easy_setopt(conn->easy, CURLOPT_URL, conn->url);
         curl_easy_setopt(conn->easy, CURLOPT_WRITEFUNCTION, write_cb);
@@ -1390,9 +1434,13 @@ crawler_init()
 				}
 				else
 				{
+					if (global_url != NULL)
+						memory -= strlen(global_url);
 					free(global_url);
 					char *url = strdup(row[0]);
+					memory += strlen(url);
 					global_url = strdup(row[0]);
+					memory += strlen(global_url);
 					//global_url[strlen(row[0])] = '\0';
 					if (debug)
 						fprintf(stderr, "url: %s\n", url);
@@ -1415,8 +1463,11 @@ crawler_init()
 				if (!mysql_real_escape_string(mysql_delete_conn, escaped_url, global_url, strlen(global_url)))
 				{}
 				int size = strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 0 WHERE url = ''") + 1;
+				if (delete_sql != NULL)
+					memory -= strlen(delete_sql);
 				free(delete_sql);
 				delete_sql = (char *) malloc (size);
+				memory += size;
 				int ret = snprintf( delete_sql, size, "UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url);
 				if (ret >= 0 && ret <= size)
 				{}
@@ -1473,8 +1524,13 @@ crawler_init()
 				if(sql_head != NULL)
 				{
 					SqlNode *sql_tmp = sql_head->next;
+					if (current->sql != NULL)
+						memory -= strlen(current->sql);
 					free(current->sql);
 					current->sql = strdup(sql_head->sql);
+					memory += strlen(current->sql);
+					memory -= strlen(sql_head->sql);
+					memory -= sizeof(SqlNode);
 					free(sql_head->sql);
 					free(sql_head);		
 					sql_queue_dec();
@@ -1532,6 +1588,8 @@ crawler_init()
 	fprintf(MSG_OUT, "Exiting normally.\n");
 	fflush(MSG_OUT);
  
+	memory -= strlen(global_url);
+	memory -= strlen(delete_sql);
 	free(global_url);
 	free(delete_sql);
 
@@ -1554,8 +1612,11 @@ crawler_init()
 				if(sql_head != NULL)
 				{
 					SqlNode *sql_tmp = sql_head->next;
+					memory -= strlen(current->sql);
 					free(current->sql);
 					current->sql = strdup(sql_head->sql);
+					memory -= strlen(sql_head->sql);
+					memory -= sizeof(SqlNode);
 					free(sql_head->sql);
 					free(sql_head);
 					sql_queue_dec();
@@ -1619,6 +1680,8 @@ crawler_init()
 			fprintf(stderr, "mysql_real_query failed: %s", mysql_error(mysql_conn));
 			exit(EXIT_FAILURE);
 		}
+		memory -= strlen(sql_head->sql);
+		memory -= sizeof(SqlNode);
 		free(sql_head->sql);
 		sql_queue_dec();
 		free(sql_head);
