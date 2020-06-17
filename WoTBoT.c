@@ -482,6 +482,7 @@ html_link_find(char *base_url, char *html)
 			continue;
 
 		if (strstr(newurl, "mailto")) {
+			memory -= strlen(newurl);
 			free((char *)newurl);
 			continue;
 		} else {
