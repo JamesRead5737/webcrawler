@@ -40,6 +40,11 @@
 #define READY 0
 #define BUSY 1
 
+#define INITIATE 0
+#define STORE 1
+#define FREE 2
+#define DONE 3
+
 int debug = 0;
 int sql_queue = 0;
 
@@ -94,8 +99,10 @@ typedef struct mysql_node
 	MYSQL *mysql_conn;
 	MYSQL_RES *result;
 	enum net_async_status status;
+	enum net_async_status status02;
 	char *sql;
 	int sequence;
+	int sequence02;
 	struct mysql_node *next;
 } MysqlNode;
 
@@ -872,7 +879,7 @@ html_parse(char *url, char *html)
 		}
 		else
 		{
-			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('')") + strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 0 WHERE url = ''") + 1;
+			int size = strlen(escaped_url) + strlen("INSERT IGNORE INTO crawled (url) VALUES ('');") + strlen(escaped_url) + strlen("UPDATE crawled SET frontier = 0 WHERE url = ''") + 1;
 			sql_current->sql = (char *) malloc (size);
 			memory += size;
 			int ret = snprintf(sql_current->sql, size, "INSERT IGNORE INTO crawled (url) VALUES ('%s');UPDATE crawled SET frontier = 0 WHERE url = '%s'", escaped_url, escaped_url);
@@ -1553,15 +1560,65 @@ crawler_init()
 					sql_head = sql_tmp;
 					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
 					current->sequence = BUSY;
+					current->sequence02 = INITIATE;
 					if (debug)
 						fprintf(stderr, "Query %s\n", current->sql);
 				}
 			}
 			else if (current->sequence == BUSY)
 			{
-				current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
-				if (current->status == NET_ASYNC_COMPLETE)
+				if (current->sequence02 == INITIATE)
 				{
+					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
+					if (current->status == NET_ASYNC_COMPLETE)
+					{
+						current->sequence02 = STORE;
+					}
+					else if (current->status == NET_ASYNC_ERROR)
+					{
+						fprintf(stderr, "mysql_real_query_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
+                                	        exit(EXIT_FAILURE);
+					}
+				}
+				if (current->sequence02 == STORE)
+				{
+					current->status02 = mysql_store_result_nonblocking(current->mysql_conn, &current->result);
+					if (current->status02 == NET_ASYNC_COMPLETE)
+					{
+						current->sequence02 = FREE;
+						current->status02 = mysql_free_result_nonblocking(current->result);
+					}
+					else if (current->status02 == NET_ASYNC_ERROR)
+					{
+						fprintf(stderr, "mysql_store_result_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
+						exit(EXIT_FAILURE);
+					}
+				}
+				else if (current->sequence02 == FREE)
+				{
+					current->status02 = mysql_free_result_nonblocking(current->result);
+					if (current->status02 == NET_ASYNC_COMPLETE)
+					{
+						if (mysql_next_result(current->mysql_conn) == 0)
+						{
+							current->sequence02 = STORE;
+							current->status02 = mysql_store_result_nonblocking(current->mysql_conn, &current->result);
+						}	
+						else
+						{
+							current->sequence = READY;
+							current->sequence02 = DONE;
+							if (debug)
+								fprintf(stderr, "Done query %s\n", current->sql);
+						}
+					}
+					else if (current->status02 == NET_ASYNC_ERROR)
+					{
+						fprintf(stderr, "mysql_free_result_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
+						exit(EXIT_FAILURE);
+					}
+				}
+					/*
 					current->sequence = READY;
 					if (debug)
 						fprintf(stderr, "Done query %s\n", current->sql);
@@ -1570,12 +1627,7 @@ crawler_init()
 						current->result = mysql_store_result(current->mysql_conn);
 						mysql_free_result(current->result);
 					} while (mysql_next_result(current->mysql_conn) == 0);
-				}
-				else if (current->status == NET_ASYNC_ERROR)
-				{
-					fprintf(stderr, "mysql_real_query_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
-                                        exit(EXIT_FAILURE);
-				}
+					*/
 			}
 			current = current->next;
 		}
