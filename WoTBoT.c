@@ -99,7 +99,6 @@ typedef struct mysql_node
 	MYSQL *mysql_conn;
 	MYSQL_RES *result;
 	enum net_async_status status;
-	enum net_async_status status02;
 	char *sql;
 	int sequence;
 	int sequence02;
@@ -1582,13 +1581,13 @@ crawler_init()
 				}
 				if (current->sequence02 == STORE)
 				{
-					current->status02 = mysql_store_result_nonblocking(current->mysql_conn, &current->result);
-					if (current->status02 == NET_ASYNC_COMPLETE)
+					current->status = mysql_store_result_nonblocking(current->mysql_conn, &current->result);
+					if (current->status == NET_ASYNC_COMPLETE)
 					{
 						current->sequence02 = FREE;
-						current->status02 = mysql_free_result_nonblocking(current->result);
+						current->status = mysql_free_result_nonblocking(current->result);
 					}
-					else if (current->status02 == NET_ASYNC_ERROR)
+					else if (current->status == NET_ASYNC_ERROR)
 					{
 						fprintf(stderr, "mysql_store_result_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
 						exit(EXIT_FAILURE);
@@ -1596,13 +1595,13 @@ crawler_init()
 				}
 				else if (current->sequence02 == FREE)
 				{
-					current->status02 = mysql_free_result_nonblocking(current->result);
-					if (current->status02 == NET_ASYNC_COMPLETE)
+					current->status = mysql_free_result_nonblocking(current->result);
+					if (current->status == NET_ASYNC_COMPLETE)
 					{
 						if (mysql_next_result(current->mysql_conn) == 0)
 						{
 							current->sequence02 = STORE;
-							current->status02 = mysql_store_result_nonblocking(current->mysql_conn, &current->result);
+							current->status = mysql_store_result_nonblocking(current->mysql_conn, &current->result);
 						}	
 						else
 						{
@@ -1612,7 +1611,7 @@ crawler_init()
 								fprintf(stderr, "Done query %s\n", current->sql);
 						}
 					}
-					else if (current->status02 == NET_ASYNC_ERROR)
+					else if (current->status == NET_ASYNC_ERROR)
 					{
 						fprintf(stderr, "mysql_free_result_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
 						exit(EXIT_FAILURE);
