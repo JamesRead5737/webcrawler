@@ -1394,8 +1394,21 @@ crawler_init()
 			{
 				if (mysql_errno(mysql_conn) == CR_SERVER_GONE_ERROR)
 				{
-					mysql_stop();
-					mysql_start();
+					//mysql_stop();
+					mysql_close(mysql_conn);
+					//mysql_start();
+					mysql_conn = mysql_init(NULL);
+					if (mysql_conn == NULL)
+        				{
+        				        fprintf(stderr, "mysql_init %s\n", mysql_error(mysql_conn));
+        				        exit(1);
+       					}
+					if (mysql_real_connect(mysql_conn, "localhost", "crawler", "1q2w3e4r", "crawl", 0, NULL, 0) == NULL)
+					{
+						fprintf(stderr, "mysql_real_connect %s\n", mysql_error(mysql_conn));
+						mysql_close(mysql_conn);
+						exit(1);
+					}
 				}
 				else
 				{
