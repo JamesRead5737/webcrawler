@@ -1471,7 +1471,7 @@ crawler_init()
                         }
                         else if (status == NET_ASYNC_ERROR)
                         {
-                                fprintf(stderr, "mysql_store_result_nonblocking: %s",mysql_error(mysql_conn));
+                                fprintf(stderr, "mysql_fetch_row_nonblocking: %s",mysql_error(mysql_conn));
                                 exit(EXIT_FAILURE);
                         }
 		}
@@ -1557,7 +1557,7 @@ crawler_init()
 					free(sql_head);		
 					sql_queue_dec();
 					sql_head = sql_tmp;
-					current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
+					//current->status = mysql_real_query_nonblocking(current->mysql_conn, current->sql, (unsigned long)strlen(current->sql));
 					current->sequence = BUSY;
 					current->sequence02 = INITIATE;
 					if (debug)
