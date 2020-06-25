@@ -1575,8 +1575,29 @@ crawler_init()
 					}
 					else if (current->status == NET_ASYNC_ERROR)
 					{
-						fprintf(stderr, "mysql_real_query_nonblocking: %s sql: %s\n", mysql_error(current->mysql_conn), current->sql);
-                                	        exit(EXIT_FAILURE);
+						if (mysql_errno(current->mysql_conn) == CR_SERVER_GONE_ERROR)
+						{
+							//mysql_stop();
+							mysql_close(current->mysql_conn);
+							//mysql_start();
+							current->mysql_conn = mysql_init(NULL);
+							if (mysql_conn == NULL)
+        						{
+        						        fprintf(stderr, "mysql_init %s\n", mysql_error(current->mysql_conn));
+        						        exit(1);
+       							}
+							if (mysql_real_connect(current->mysql_conn, "localhost", "crawler", "1q2w3e4r", "crawl", 0, NULL, 0) == NULL)
+							{
+								fprintf(stderr, "mysql_real_connect %s\n", mysql_error(current->mysql_conn));
+								mysql_close(current->mysql_conn);
+								exit(1);
+							}
+						}
+						else
+						{
+							fprintf(stderr, "mysql_real_query_nonblocking: %s errno: %d sql: %s\n",mysql_error(current->mysql_conn), mysql_errno(current->mysql_conn), current->sql);
+							exit(EXIT_FAILURE);
+						}
 					}
 				}
 				if (current->sequence02 == STORE)
